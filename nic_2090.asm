@@ -1,6 +1,6 @@
 DataL	equ	0x20
 DataH	equ	0x21
-Points	equ 	0x22
+Buffer	equ 	0x22
 
 ;--------------------------------------------------------------------------
 ;  Reg Let.  Bit No.   into 2090/out of 2090 meaning
@@ -51,7 +51,11 @@ Points	equ 	0x22
 ;       E       7             - /  -
 ;--------------------------------------------------------------------------
 
-
+	Bank3
+	bcf	ANSEL,2		;sets PORTA 2 and 3 to be digital pins
+	bcf	ANSEL,3
+	bcf	ANSEL,4
+	bcf	ANSEL,5
 	Bank1
 	bcf	PORTA,2		;A2 - Output - Scan Count Reset
 	bcf	PORTA,3		;A3 - Output - Scan Count Increment
@@ -61,7 +65,7 @@ Points	equ 	0x22
 	bsf	PORTB,1		;B1 - Input  - Data bit 1
 	bsf	PORTB,2		;B2 - Input  - Data bit 2
 	bsf	PORTB,3		;B3 - Input  - Data bit 3
-	bsf	PORTB,6		;B6 - Input  - I/O Step
+	bcf	PORTB,6		;B6 - Output  - I/O Step
 	bcf	PORTB,7		;B7 - Output - Read/Write 0 = Read, 1 = Write
 	bsf	PORTC,0		;C0 - Input  - IO Flag
 	bsf	PORTC,1		;C1 - Input  - Live Flag
@@ -83,18 +87,21 @@ Points	equ 	0x22
 	Bank0
 
 
-	bsf	PORTA,3; pulse Hold Last
-	bcf	PORTC,5 
-	bcf	PORTA,3; and reset counter
+	bcf	PORTA,2	;reset counter
+	movlw	1
+	call	Wait
+	bsf	PORTA,2
+	bcf	PORTC,5 ;pulse Hold Last
 	bsf	PORTC,5
 
 	bsf	PORTE,0; turn I/O Active off
+	bsf	PORTB,6; set IO step high
 
 
-add	
+;add	
 	;somehow get number of points from user
-	bsf	PORTA,3	;Reset Scan Counter
-	bcf	PORTA,3
+	bcf	PORTA,3	;Reset Scan Counter
+	bsf	PORTA,3
 
 	bsf	PORTC,5	;clear Hold Last
 	movlw	0xE7	;set Hold Next and Go Live
@@ -105,7 +112,6 @@ add
 	
 	bsf	PORTC,4 ;finish Hold Next pulse
 
-	bcf	PORTE,0	;turn on I/O Active
 
 wait
 	movlw	0x02	;mask of all bits but LIVE bit
@@ -114,24 +120,32 @@ wait
 	btfsc	STATUS,Z; if LIVE is 0 then it is active
 	goto	wait
 
-	bcf	PORTA,4
-	bcf	PORTA,5
+	bcf	PORTE,0	;turn on I/O Active
+
+	movlw	1
+	call	Wait
+	
+	bsf	PORTA,4	;reset address mode
+	bsf	PORTA,5
 	
 	nop		;wait 200 nanoseconds
 
-	bsf	PORTA,5 ;go to Address Advance mode
+	bcf	PORTA,4 ;go to Address Advance mode
 
-	movlw	20
-	movwf	Points	;set 20 points to be read
+	movlw	255
+	movwf	Buffer	;set 20 points to be read
 
-!
+
 Read	
 	clrf	DataL
-	clrf	DataH	;clears data regs
+	clrf	DataH	;clear data regs
 
-	bsf	PORTB,6	;pulse IO Step
-	
-	nop		;wait 200 nanoseconds
+	bcf	PORTB,6	;pulse IO Step
+	nop
+	bsf	PORTB,6
+
+	nop
+	nop
 
 w4d	
 	movf	PORTC,W	;put port c into W
@@ -140,29 +154,64 @@ w4d
 	btfsc	STATUS,Z;if I/O flag isn't high wait again
 	goto 	w4d	;continue waiting for it to go high
 
-	movf	PORTC,W
-	andlw	0x04	;mask off PORTC to get norm bit
-
-	btfss	STATUS,Z; if norm bit is not zero 
-	incf	DataL	;set norm bit 
-
 	movf	PORTB,W	;get portb with the first 4 bits of data
 	andlw	0x0F	;mask off other bits besides data
 
-	rlf	W,W	;bit shift 4 bits left one
-	bcf	W,0	;clear first bit incase carry was set
-	iorwf	DataL,F	;put first four bits into data
+	movwf	DataL	;put first four bits into least significant data
+
+	movf	PORTD,W	;put 8 bits of most significant data into W
+	movwf	DataH	;into Data high
+
+	swapf	DataH,W	;swap nibbles
+
+	andlw	0xF0	;mask off lower nibble
+	
+	iorwf	DataL	;add lower nibble of high to low
+
+	swapf	DataH,W	;swap nibbles
+	
+	andlw	0x0F	;mask
+	movwf	DataH	;put into high
+
+	movf	PORTC,W	;put norm into w
+	andlw	0x04	;mask everything but norm
+	rlf	W
+	rlf	W
+	iorwf	DataH	;put norm into DataH
+
+	movf	DataH,W
+
+	call	Hex2TCL	;send high bits to usb
+	
 
 	movf	DataL,W	; put into W to print
-	call	TxByte	
+	call	Hex2TCL	;send low bits to usb
 
+	movlw	'\n
+	call	TxByte	;new line
+
+	bcf	PORTB,6	;pulse IO Step
+	nop
+	bsf	PORTB,6	;- skipping second channel
 	
-	bsf	PORTA,3
-	bcf	PORTA,3
+
+;	bcf	PORTA,3	;increment scan count
+;	movlw	1
+;	call	Wait
+;	bsf	PORTA,3
+
+	decf	Buffer,F;decrement buffer
+
+	btfss	STATUS,Z;if decremented to 0 don't read again
+	goto 	Read
 
 	bsf	PORTE,0 ;turn off I/O Active
 
 	return
+
+
+
+
 
 
 
