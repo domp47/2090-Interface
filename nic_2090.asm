@@ -1,6 +1,7 @@
 DataL	equ	0x20
 DataH	equ	0x21
-Buffer	equ 	0x22
+BufferH	equ 	0x22
+BufferL	equ	0x23
 
 ;--------------------------------------------------------------------------
 ;  Reg Let.  Bit No.   into 2090/out of 2090 meaning
@@ -98,8 +99,6 @@ Buffer	equ 	0x22
 	bsf	PORTB,6; set IO step high
 
 
-;add	
-	;somehow get number of points from user
 	bcf	PORTA,3	;Reset Scan Counter
 	bsf	PORTA,3
 
@@ -109,7 +108,7 @@ Buffer	equ 	0x22
 	andwf	PORTC	;AND with PORTC to clear the bits
 
 	bsf	PORTC,3	;hold Hold Next longer than Go Live
-	
+
 	bsf	PORTC,4 ;finish Hold Next pulse
 
 
@@ -124,19 +123,20 @@ wait
 
 	movlw	1
 	call	Wait
-	
+
 	bsf	PORTA,4	;reset address mode
 	bsf	PORTA,5
-	
+
 	nop		;wait 200 nanoseconds
 
 	bcf	PORTA,4 ;go to Address Advance mode
 
-	movlw	255
-	movwf	Buffer	;set 20 points to be read
+	clrf	BufferL
+	movlw	0x08
+	movwf	BufferH	;the Explorer buffer is 2048 complex numbers
 
 
-Read	
+Read
 	clrf	DataL
 	clrf	DataH	;clear data regs
 
@@ -147,10 +147,10 @@ Read
 	nop
 	nop
 
-w4d	
+w4d
 	movf	PORTC,W	;put port c into W
 	andlw	0x01	;mask off all bits but I/O Flag
-	
+
 	btfsc	STATUS,Z;if I/O flag isn't high wait again
 	goto 	w4d	;continue waiting for it to go high
 
@@ -165,11 +165,11 @@ w4d
 	swapf	DataH,W	;swap nibbles
 
 	andlw	0xF0	;mask off lower nibble
-	
+
 	iorwf	DataL	;add lower nibble of high to low
 
 	swapf	DataH,W	;swap nibbles
-	
+
 	andlw	0x0F	;mask
 	movwf	DataH	;put into high
 
@@ -182,7 +182,7 @@ w4d
 	movf	DataH,W
 
 	call	Hex2TCL	;send high bits to usb
-	
+
 
 	movf	DataL,W	; put into W to print
 	call	Hex2TCL	;send low bits to usb
@@ -193,25 +193,23 @@ w4d
 	bcf	PORTB,6	;pulse IO Step
 	nop
 	bsf	PORTB,6	;- skipping second channel
-	
 
-;	bcf	PORTA,3	;increment scan count
-;	movlw	1
-;	call	Wait
-;	bsf	PORTA,3
 
-	decf	Buffer,F;decrement buffer
+	decf	BufferL,F;decrement buffer
+	movlw 0xFF
+	subwf	BufferL ;check if buffer rolled over
 
+	btfsc	STATUS,Z
+	decf	BufferH	;decrement upper byte because lower byte rolled over
+
+	movf	BufferH	;raise z flag is 0
+	btfss	STATUS,Z	;checks if upper byte is 0
+	goto 	Read
+
+	movf	BufferL	;raise z flag is 0
 	btfss	STATUS,Z;if decremented to 0 don't read again
 	goto 	Read
 
 	bsf	PORTE,0 ;turn off I/O Active
 
 	return
-
-
-
-
-
-
-
