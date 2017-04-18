@@ -1,7 +1,7 @@
 DataL	equ	0x20
 DataH	equ	0x21
 BufferH	equ 	0x22
-BufferL	equ		0x23
+BufferL	equ	0x23
 
 ;--------------------------------------------------------------------------
 ;  Reg Let.  Bit No.   into 2090/out of 2090 meaning
@@ -86,20 +86,35 @@ BufferL	equ		0x23
 	bcf	PORTE,1		;E1 - Output - Data R/W 0 = Read, 1 = Write
 	bcf	PORTE,2		;E2 - Output - Normalization R/W 0 = Read, 1 = Write
 	Bank0
+	
+
+	clrf	BufferL
+	movlw	0x08
+	movwf	BufferH	;the Explorer buffer is 2048 complex numbers
+
 
 
 	bcf	PORTA,2	;reset counter
 	movlw	1
 	call	Wait
+	
 	bsf	PORTA,2
 	bcf	PORTC,5 ;pulse Hold Last
 	bsf	PORTC,5
 
 	bsf	PORTE,0; turn I/O Active off
-	bsf	PORTB,6; set IO step high
-
+	
+;;;;;;;;;;;;;;;;;;;;
+;Wait For DVIEW	
+;;;;;;;;;;;;;;;;;;;;
 Trigger
-	Call RxByte ;wait until trigger is sent from computer
+	call	RxByte ;wait until trigger is sent from computer
+
+	bcf	PORTC,5 ;pulse Hold Last
+	bsf	PORTC,5
+
+	bsf	PORTE,0; turn I/O Active off
+	bsf	PORTB,6; set IO step high
 
 	bcf	PORTA,3	;increment Scan Counter
 	bsf	PORTA,3
@@ -121,6 +136,13 @@ wait
 	btfsc	STATUS,Z; if LIVE is 0 then it is active
 	goto	wait
 
+
+	movlw	0x47
+	call	Hex2TCL
+
+	movlw 	'\n
+	call	Hex2TCL
+
 	bcf	PORTE,0	;turn on I/O Active
 
 	movlw	1
@@ -132,11 +154,6 @@ wait
 	nop		;wait 200 nanoseconds
 
 	bcf	PORTA,4 ;go to Address Advance mode
-
-	clrf	BufferL
-	movlw	0x08
-	movwf	BufferH	;the Explorer buffer is 2048 complex numbers
-
 
 Read
 	clrf	DataL
@@ -155,6 +172,65 @@ w4d
 
 	btfsc	STATUS,Z;if I/O flag isn't high wait again
 	goto 	w4d	;continue waiting for it to go high
+;;;;;;;;;;;;;;;;;;
+;Get First Channel
+;;;;;;;;;;;;;;;;;;
+	movf	PORTB,W	;get portb with the first 4 bits of data
+	andlw	0x0F	;mask off other bits besides data
+
+	movwf	DataL	;put first four bits into least significant data
+
+	movf	PORTD,W	;put 8 bits of most significant data into W
+	movwf	DataH	;into Data high
+
+	swapf	DataH,W	;swap nibbles
+
+	andlw	0xF0	;mask off lower nibble
+
+	iorwf	DataL	;add lower nibble of high to low
+
+	swapf	DataH,W	;swap nibbles
+
+	andlw	0x0F	;mask
+	movwf	DataH	;put into high
+
+	movf	PORTC,W	;put norm into w
+	andlw	0x04	;mask everything but norm
+	rlf	W
+	rlf	W
+	iorwf	DataH	;put norm into DataH
+
+
+	;movlw	'1
+	;call 	TxByte
+	;movlw	':
+	;call	TxByte
+;;;;;;;;;;;;;;;;;;;;
+;Wait For DVIEW	
+;;;;;;;;;;;;;;;;;;;;
+	call	RxByte ;wait until trigger is sent from computer
+
+;	bcf	PORTA,3	;increment Scan Counter
+;	bsf	PORTA,3
+
+	movf	DataH,W
+
+	call	Hex2TCL	;send high bits to usb
+
+
+	movf	DataL,W	; put into W to print
+	call	Hex2TCL	;send low bits to usb
+
+	movlw	'\n
+	call	TxByte	;new line
+
+	bcf	PORTB,6	;pulse IO Step
+	nop
+	bsf	PORTB,6	
+
+;;;;;;;;;;;;;;;;;;;
+;Get Second Channel
+;;;;;;;;;;;;;;;;;;;
 
 	movf	PORTB,W	;get portb with the first 4 bits of data
 	andlw	0x0F	;mask off other bits besides data
@@ -181,8 +257,21 @@ w4d
 	rlf	W
 	iorwf	DataH	;put norm into DataH
 
-	movf	DataH,W
 
+	;movlw	'2
+	;call 	TxByte
+	;movlw	':
+	;call	TxByte
+
+;;;;;;;;;;;;;;;;;;;;
+;Wait For DVIEW	
+;;;;;;;;;;;;;;;;;;;;
+	call	RxByte ;wait until trigger is sent from computer
+
+;	bcf	PORTA,3	;increment Scan Counter
+;	bsf	PORTA,3
+
+	movf	DataH,W
 	call	Hex2TCL	;send high bits to usb
 
 
@@ -191,15 +280,12 @@ w4d
 
 	movlw	'\n
 	call	TxByte	;new line
-
-	bcf	PORTB,6	;pulse IO Step
-	nop
-	bsf	PORTB,6	;- skipping second channel
-
-
+;;;;;;;;;;;;;
+;Decrements
+;;;;;;;;;;;;;
 	decf	BufferL,F;decrement buffer
 	movlw 0xFF
-	subwf	BufferL ;check if buffer rolled over
+	subwf	BufferL,W ;check if buffer rolled over
 
 	btfsc	STATUS,Z
 	decf	BufferH	;decrement upper byte because lower byte rolled over
@@ -215,3 +301,4 @@ w4d
 	bsf	PORTE,0 ;turn off I/O Active
 
 	goto Trigger ; wait for next scan
+

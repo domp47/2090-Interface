@@ -7,7 +7,7 @@ set VERSION [clock format [file mtime [info script]] -format {%Y.%m.%d %H:%M}]
 
 set D_XMAX 0.25	;# the default fraction of xrange to display on reload
 
-set P_port "/dev/tty/USB0"
+set P_port "/dev/ttyUSB0"
 set P_BAUD "57600"
 set BUF_SIZE 2048
 
@@ -590,107 +590,96 @@ proc SaveConfig { } {
     }
 }
 proc ConnectPICLab { } {
-    global P_port pic
-
+    global P_port pic P_BAUD
     if { [info exists pic] } {
       close $pic
       unset pic
       .bbar.con configure -image button_attach
-      setStatus "ok" "Disconnected from PIC"
+      SetStatus "warning" "Disconnected from PIC"
     } else {
       TTYinit
       if { [info exists pic] } {
         .bbar.con configure -image button_detach
-        setStatus "ok" "Connected to PIC at $P_BAUD"
+        SetStatus "ok" "Connected to PIC at $P_BAUD"
       }
     }
  }
  proc TTYinit { } {
-   global P_port pic
+   global P_port pic P_BAUD
+
+   if {[info exists pic]} { close $pic; unset pic }
 
    if { [catch {set pic [open $P_port RDWR]}] } {
      SetStatus "warning" "No connection to $P_port"
      return
    }
    fconfigure $pic -mode $P_BAUD,n,8,1 -handshake rtscts -translation binary
-
-   if {[info exists pic]} {puts -nonewline $pic "0"; flush $pic}
-   after 1000
-
-   if {[read $pic 1] != "\x1f"} {
-     SetStatus "warning" "PICLab not found at $P_port"
-     close $pic; unset pic
-   } else {
+   #if {[info exists pic]} {puts -nonewline $pic "0"; flush $pic}
+   #after 1000
+   #if {[read $pic 1] != "\x1f"} {
+    # SetStatus "warning" "PICLab not found at $P_port"
+     #close $pic; unset pic
+   #} else {
      SetStatus "ok" "PICLab board OK"
      fconfigure $pic -blocking true
-   }
+   #}
    update
  }
  proc aquire { } {
    global filename ::tt ::re ::im
-   global pic nscans phaseList refresh size staddress ph0 sw make domain
-
+   global pic nscans phaseList refresh BUF_SIZE staddress ph0 sw make domain
    if { ![info exists pic] } {
      SetStatus "error" "PIC not Connected"
      return
    }
-
    if { $nscans < 1 || $nscans > 1000000} {
      SetStatus "error" "$nscans is not a valid number of scans"
      return
    }
-
    if { $phaseList == ""} {
      set phaseList 0
    } elseif {$phaseList < 0 || $phaseList > 360 } {
        SetStatus "error" "$phaseList is an invalid Phase List"
        return
    }
-
    if { $refresh == ""} {
      set refresh $nscans
    } elseif { $refresh < 0 || $refresh > $nscans} {
      SetStatus "error" "$refresh is not a valid frequency of reporting"
      return
    }
-
-   global filename ::tt ::re ::im
-   global nscans size staddress ph0 sw make domain
    if {$domain == 0} {
   set fname [tk_getSaveFile -initialdir [file dirname $filename] -filetypes {{"Xnmr data" {.dat}} {All {*}}}]
    } else {
   set fname [tk_getSaveFile -initialdir [file dirname $filename] -filetypes {{"Xnmr data" {.ft}} {All {*}}}]
   }
    if {$fname == ""} { SetStatus "ok" "save file cancelled"; return }
-
    set fp_fail [catch {set fp [open $fname "w"]}]
    if { $fp_fail } { SetStatus "error" "error opening $fname for writing"; return }
    fconfigure $fp -translation binary -encoding binary
-
-   vector create ::re($size)
-   vector create ::im($size)
+   vector create ::re($BUF_SIZE)
+   vector create ::im($BUF_SIZE)
    set x_min {}
    set x_max {}
    set y_min {}
    set y_max {}
+   puts -nonewline $pic "1"; flush $pic ;#tell pic ready to aquire data
 
-   puts -nonewline $pic "1"; flush $pic #tell pic ready to aquire data
 
-   for { set n 0} { n < $nscans} {incr n} {
-     for { set i 0} { i < $size} {incr i}{
+   set a [gets $pic]
 
-       puts -nonewline $pic "1"; flush $pic #tel pic to send first pair of data
+puts "stuffs"
+   for { set n 0} { $n < $nscans} {incr n} {
+puts $BUF_SIZE
+     for { set i 0} { $i < $BUF_SIZE} { incr i } {
+	puts -nonewline $pic "1"; flush $pic ;#tell pic to send first data
+        set in_re 0x[gets $pic ] ;#read the data point including new line 
 
-        binary scan [read $pic 4 ] in_re  #read the data point including new line characters
-        binary scan [read $pic 1]  newLine
-        binary scan [read $pic 4]  in_im
-        binary scan [read $pic 1]  newLine
+	puts -nonewline $pic "1"; flush $pic ;#tell pic to send second data
+        set in_im 0x[gets $pic ]
+	puts "Real: $in_re , Im: $in_im , number: $i"
     }
-
    }
-
-
-
  }
  proc CreateFile { } {
    global filename ::tt ::re ::im
@@ -701,7 +690,6 @@ proc ConnectPICLab { } {
   set fname [tk_getSaveFile -initialdir [file dirname $filename] -filetypes {{"Xnmr data" {.ft}} {All {*}}}]
   }
    if {$fname == ""} { SetStatus "ok" "save file cancelled"; return }
-
    set fp_fail [catch {set fp [open $fname "w"]}]
    if { $fp_fail } { SetStatus "error" "error opening $fname for writing"; return }
    fconfigure $fp -translation binary -encoding binary
@@ -742,7 +730,6 @@ proc ConnectPICLab { } {
   }]
    if { $wh_fail } { SetStatus "error" "error writing header to $fname"; close $fp; return }
  }
-
 #
 # defaults needed for the blank start-up, if there is no .xnmrrc
 #
@@ -802,7 +789,6 @@ proc ConnectPICLab { } {
   button .tbar.bc -text "BC" -command { BaselineCorrect }
   button .tbar.ft -text "FT" -command { FFT }
   pack .tbar.exit .tbar.s .tbar.si .tbar.sr .tbar.sw .tbar.swl .tbar.st .tbar.stl .tbar.ph0 .tbar.phl .tbar.fsh .tbar.shl .tbar.bc .tbar.tau .tbar.em .tbar.ft -side right -fill x
-
   frame .bbar
   button .bbar.r -image button_redraw -command {set x_min {}; set x_max {}; set y_min {}; set y_max {}; ReDraw .g}
   button .bbar.e -image button_hzoom   -command {HoriZoom 0.5}
@@ -858,7 +844,6 @@ proc ConnectPICLab { } {
   pack .rbar.m .rbar.d -side top
   pack .rbar.vs -expand 1 -fill both
   pack .g  -expand 1  -fill both
-
   set rcname ".xnmrrc"
   if [file exists $rcname] {
     source $rcname
