@@ -1,7 +1,7 @@
 DataL	equ	0x20
 DataH	equ	0x21
 BufferH	equ 	0x22
-BufferL	equ	0x23
+BufferL	equ		0x23
 
 ;--------------------------------------------------------------------------
 ;  Reg Let.  Bit No.   into 2090/out of 2090 meaning
@@ -53,15 +53,15 @@ BufferL	equ	0x23
 ;--------------------------------------------------------------------------
 
 	Bank3
-	bcf	ANSEL,2		;sets PORTA 2 and 3 to be digital pins
+	bcf	ANSEL,2		;sets PORTA 2 - 5 to be digital pins
 	bcf	ANSEL,3
 	bcf	ANSEL,4
 	bcf	ANSEL,5
 	Bank1
 	bcf	PORTA,2		;A2 - Output - Scan Count Reset
 	bcf	PORTA,3		;A3 - Output - Scan Count Increment
-	bcf	PORTA,4		;A4 - Output - AC1?????
-	bcf	PORTA,5		;A5 - Output - AC2?????
+	bcf	PORTA,4		;A4 - Output - AC1
+	bcf	PORTA,5		;A5 - Output - AC2
 	bsf	PORTB,0		;B0 - Input  - Data bit 0
 	bsf	PORTB,1		;B1 - Input  - Data bit 1
 	bsf	PORTB,2		;B2 - Input  - Data bit 2
@@ -98,8 +98,10 @@ BufferL	equ	0x23
 	bsf	PORTE,0; turn I/O Active off
 	bsf	PORTB,6; set IO step high
 
+Trigger
+	Call RxByte ;wait until trigger is sent from computer
 
-	bcf	PORTA,3	;Reset Scan Counter
+	bcf	PORTA,3	;increment Scan Counter
 	bsf	PORTA,3
 
 	bsf	PORTC,5	;clear Hold Last
@@ -212,4 +214,4 @@ w4d
 
 	bsf	PORTE,0 ;turn off I/O Active
 
-	return
+	goto Trigger ; wait for next scan

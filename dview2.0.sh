@@ -7,7 +7,9 @@ set VERSION [clock format [file mtime [info script]] -format {%Y.%m.%d %H:%M}]
 
 set D_XMAX 0.25	;# the default fraction of xrange to display on reload
 
-set port "/dev/tty/USB0"
+set P_port "/dev/tty/USB0"
+set P_BAUD "57600"
+set BUF_SIZE 2048
 
  package require Tk
 # do a dummy file load, to import the ::dialog:: space
@@ -140,7 +142,7 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
    global ::tt ::re ::im np .g x_min x_max y_min y_max hide_r hide_i filename
    global nscans size staddress ph0 sw dw make domain tau
    set filename_ $filename
-   if {$fname == "" || ![file exists $fname]} { 
+   if {$fname == "" || ![file exists $fname]} {
      set filename [tk_getOpenFile -initialdir [file dirname $fname] -filetypes {{"Xnmr data" {.dat .ft}} {All {*}}}]
      }
    if { $filename == "" } { set filename $filename_; return }
@@ -211,7 +213,7 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
    }
 
  proc SaveFile { } {
-   global filename ::tt ::re ::im 
+   global filename ::tt ::re ::im
    global nscans size staddress ph0 sw make domain
    if {$domain == 0} {
 	set fname [tk_getSaveFile -initialdir [file dirname $filename] -filetypes {{"Xnmr data" {.dat}} {All {*}}}]
@@ -281,7 +283,7 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
    } else {
      set filename $fname
      SetStatus "ok" "$filename saved"
-     } 
+     }
    }
 
  proc PhaseShift { } {
@@ -318,8 +320,8 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
 
  proc FracShift { } {
    global .zoom.g .g ::tt ::re ::im domain size staddress fshift ::zt ::zx ::zy ibeg iend
-   if { $domain == 1 } { SetStatus "warning" "fractional shift not available in FT domain; return } #######REMOVED QUOTE AFTER DOMAIN
-   if { [winfo exists .zoom] } { 
+   if { $domain == 1 } { SetStatus "warning" "fractional shift not available in FT domain;" return }
+   if { [winfo exists .zoom] } {
 	ApplyFS $ibeg $iend
    } else {
      set ibeg [expr $staddress - 4]
@@ -335,9 +337,9 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
        set ::zx($l) $::re($i)
        set ::zy($l) $::im($i)
        }
-##puts "zx 0..$l = $::zx(0) $::zx(1) $::zx(2) $::zx(3) .. $::zx($l)" 
+##puts "zx 0..$l = $::zx(0) $::zx(1) $::zx(2) $::zx(3) .. $::zx($l)"
      toplevel .zoom
-     graph .zoom.g -width 600 -height 600 -bd 2 -relief groove 
+     graph .zoom.g -width 600 -height 600 -bd 2 -relief groove
      .zoom.g grid configure -hide no -dashes { 2 2 }
      .zoom.g legend configure -position plotarea -anchor ne
      frame .zoom.b
@@ -355,12 +357,10 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
      wm iconify .
      ApplyFS $ibeg $iend
      }
-
-   .zoom.g element configure Re -ydata ::zx 
+   .zoom.g element configure Re -ydata ::zx
 #   .zoom.g element configure Im -ydata ::zy -hide on
    event generate .zoom.g <Configure>
    }
-
  proc ApplyFS { st en } {
    global .zoom.g fshift ::zx ::zy size ::re ::im
    vector create p2 p3 pk2 pk3 pk4 cx0 cx1 cx2 cx3 cx4
@@ -375,15 +375,12 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
    ::cx2 expr { 0.2 - 2.0*::pk3 }
    ::cx3 expr { 0.2 + ::pk2 - ::pk3 - 2.4*::pk4 }
    ::cx4 expr { 0.2 + 2.0*(::pk2 + ::pk3) + 1.2*::pk4 }
-
-##puts "cx0 = $::cx0(0) $::cx0(1) $::cx0(2) $::cx0(3) $::cx0(4) [vector expr sum(::cx0)]" 
-##puts "cx1 = $::cx1(0) $::cx1(1) $::cx1(2) $::cx1(3) $::cx1(4) [vector expr sum(::cx1)]" 
-##puts "cx2 = $::cx2(0) $::cx2(1) $::cx2(2) $::cx2(3) $::cx2(4) [vector expr sum(::cx2)]" 
-##puts "cx3 = $::cx3(0) $::cx3(1) $::cx3(2) $::cx3(3) $::cx3(4) [vector expr sum(::cx3)]" 
-##puts "cx4 = $::cx4(0) $::cx4(1) $::cx4(2) $::cx4(3) $::cx4(4) [vector expr sum(::cx4)]" 
-
+##puts "cx0 = $::cx0(0) $::cx0(1) $::cx0(2) $::cx0(3) $::cx0(4) [vector expr sum(::cx0)]"
+##puts "cx1 = $::cx1(0) $::cx1(1) $::cx1(2) $::cx1(3) $::cx1(4) [vector expr sum(::cx1)]"
+##puts "cx2 = $::cx2(0) $::cx2(1) $::cx2(2) $::cx2(3) $::cx2(4) [vector expr sum(::cx2)]"
+##puts "cx3 = $::cx3(0) $::cx3(1) $::cx3(2) $::cx3(3) $::cx3(4) [vector expr sum(::cx3)]"
+##puts "cx4 = $::cx4(0) $::cx4(1) $::cx4(2) $::cx4(3) $::cx4(4) [vector expr sum(::cx4)]"
    set i0 0
-
    if { $st == 0 } {
      vector create xx(5) yy(5) zz(5)
      for {set j 0} {$j < 5} {incr j} {
@@ -398,7 +395,6 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
      incr st
      incr i0
      }
-
    if { $st == 1 } {
      vector create xx(5) yy(5) zz(5)
      for {set j 0} {$j < 5} {incr j} {
@@ -413,9 +409,7 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
      incr st
      incr i0
      }
-
    set l [expr $en - $st]
-
    if { $en == [expr $size - 1] } {
      vector create xx(5) yy(5) zz(5)
      for {set j 0} {$j < 5} {incr j} {
@@ -430,7 +424,6 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
      incr en -1
      incr l -1
      }
-
    if { $en == [expr $size - 2] } {
      vector create xx(5) yy(5) zz(5)
      for {set j 0} {$j < 5} {incr j} {
@@ -445,9 +438,7 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
      incr en -1
      incr l -1
      }
-
 ##puts "$st .. $en, offset $i0, 0 .. $l"
-
    for {set i 0} {$i <= $l} {incr i} {
      vector create xx(5) yy(5) zz(5)
      for {set j 0} {$j < 5} {incr j} {
@@ -460,7 +451,6 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
      set ::zy($i0+$i) [vector expr sum(::zz)]
      }
    }
-
  proc ExpMultiply { } {
    global .g ::tt ::re ::im size staddress dw tau domain
    if { $domain == 1 } { SetStatus "warning" "exponential multiplication not available in FT domain"; return }
@@ -472,7 +462,6 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
 	}
    ReDraw .g
    }
-
  proc FFT { } {
    global .g ::re ::im size staddress domain x_min x_max y_min y_max re_ im_
    for {set i 0} {$i < $size} {incr i} {
@@ -493,7 +482,6 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
      set ::re($i) [real $zz]
      set ::im($i) [imag $zz]
      }
-
    set domain 1
    if [info exists re_] {vector destroy re_ im_}
    set x_min {}
@@ -502,7 +490,6 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
    set y_max {}
    ReDraw .g
    }
-
  proc VertZoom { factor } {
    global .g y_min y_max
    AddZoomStack .g
@@ -515,7 +502,6 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
    .g axis configure y -min $y_min -max $y_max
    event generate .g <Configure>
    }
-
  proc HoriZoom { factor } {
    global .g x_min x_max
    AddZoomStack .g
@@ -524,7 +510,6 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
    .g axis configure x -min $x_min -max $x_max
    event generate .g <Configure>
    }
-
  proc AddZoomStack { graph } {
     global zoomInfo
     set cmd {}
@@ -538,7 +523,6 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
       }
     set zoomInfo($graph,stack) [linsert $zoomInfo($graph,stack) 0 $cmd]
     }
-
  proc ReDraw { graph } {
    global D_XMAX ::tt x_min x_max y_min y_max hide_r hide_i size staddress sw dw domain
    if {  $domain == 0 } {
@@ -558,7 +542,6 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
      }
    $graph element configure Re -xdata ::tt -hide $hide_r
    $graph element configure Im -xdata ::tt -hide $hide_i
-
    if { $y_min == "" && $y_max == "" } {
      set y_min 0
      set y_max 1
@@ -570,12 +553,11 @@ R4Y8woWJBIYIYNxMUUGlz6BDix5NWlIgADs=
        if [expr $y_min > $::im(min)] { set y_min $::im(min) }
        if [expr $y_max < $::im(max)] { set y_max $::im(max) }
        }
-     $graph axis configure y -min $y_min -max $y_max 
+     $graph axis configure y -min $y_min -max $y_max
      }
    event generate $graph <Configure>
    InitStack $graph
    }
-
 proc SetStatus { state message } {
    global .status.led .status.text
    switch -- $state {
@@ -586,11 +568,10 @@ proc SetStatus { state message } {
      }
    .status.text configure -text "$message"
    }
-
 proc SaveConfig { } {
   global .g filename hide_r hide_i x_min x_max y_min y_max
   if { [catch {set fp [open ".xnmrrc" w]}] } {
-    SetStatus warning "Unable to save configuration in .xnmrrc, exiting"
+    SetStatus "warning" "Unable to save configuration in .xnmrrc, exiting"
     update; after 2000
     } \
   else {
@@ -608,6 +589,160 @@ proc SaveConfig { } {
     close $fp
     }
 }
+proc ConnectPICLab { } {
+    global P_port pic
+
+    if { [info exists pic] } {
+      close $pic
+      unset pic
+      .bbar.con configure -image button_attach
+      setStatus "ok" "Disconnected from PIC"
+    } else {
+      TTYinit
+      if { [info exists pic] } {
+        .bbar.con configure -image button_detach
+        setStatus "ok" "Connected to PIC at $P_BAUD"
+      }
+    }
+ }
+ proc TTYinit { } {
+   global P_port pic
+
+   if { [catch {set pic [open $P_port RDWR]}] } {
+     SetStatus "warning" "No connection to $P_port"
+     return
+   }
+   fconfigure $pic -mode $P_BAUD,n,8,1 -handshake rtscts -translation binary
+
+   if {[info exists pic]} {puts -nonewline $pic "0"; flush $pic}
+   after 1000
+
+   if {[read $pic 1] != "\x1f"} {
+     SetStatus "warning" "PICLab not found at $P_port"
+     close $pic; unset pic
+   } else {
+     SetStatus "ok" "PICLab board OK"
+     fconfigure $pic -blocking true
+   }
+   update
+ }
+ proc aquire { } {
+   global filename ::tt ::re ::im
+   global pic nscans phaseList refresh size staddress ph0 sw make domain
+
+   if { ![info exists pic] } {
+     SetStatus "error" "PIC not Connected"
+     return
+   }
+
+   if { $nscans < 1 || $nscans > 1000000} {
+     SetStatus "error" "$nscans is not a valid number of scans"
+     return
+   }
+
+   if { $phaseList == ""} {
+     set phaseList 0
+   } elseif {$phaseList < 0 || $phaseList > 360 } {
+       SetStatus "error" "$phaseList is an invalid Phase List"
+       return
+   }
+
+   if { $refresh == ""} {
+     set refresh $nscans
+   } elseif { $refresh < 0 || $refresh > $nscans} {
+     SetStatus "error" "$refresh is not a valid frequency of reporting"
+     return
+   }
+
+   global filename ::tt ::re ::im
+   global nscans size staddress ph0 sw make domain
+   if {$domain == 0} {
+  set fname [tk_getSaveFile -initialdir [file dirname $filename] -filetypes {{"Xnmr data" {.dat}} {All {*}}}]
+   } else {
+  set fname [tk_getSaveFile -initialdir [file dirname $filename] -filetypes {{"Xnmr data" {.ft}} {All {*}}}]
+  }
+   if {$fname == ""} { SetStatus "ok" "save file cancelled"; return }
+
+   set fp_fail [catch {set fp [open $fname "w"]}]
+   if { $fp_fail } { SetStatus "error" "error opening $fname for writing"; return }
+   fconfigure $fp -translation binary -encoding binary
+
+   vector create ::re($size)
+   vector create ::im($size)
+   set x_min {}
+   set x_max {}
+   set y_min {}
+   set y_max {}
+
+   puts -nonewline $pic "1"; flush $pic #tell pic ready to aquire data
+
+   for { set n 0} { n < $nscans} {incr n} {
+     for { set i 0} { i < $size} {incr i}{
+
+       puts -nonewline $pic "1"; flush $pic #tel pic to send first pair of data
+
+        binary scan [read $pic 4 ] in_re  #read the data point including new line characters
+        binary scan [read $pic 1]  newLine
+        binary scan [read $pic 4]  in_im
+        binary scan [read $pic 1]  newLine
+    }
+
+   }
+
+
+
+ }
+ proc CreateFile { } {
+   global filename ::tt ::re ::im
+   global nscans size staddress ph0 sw make domain
+   if {$domain == 0} {
+  set fname [tk_getSaveFile -initialdir [file dirname $filename] -filetypes {{"Xnmr data" {.dat}} {All {*}}}]
+   } else {
+  set fname [tk_getSaveFile -initialdir [file dirname $filename] -filetypes {{"Xnmr data" {.ft}} {All {*}}}]
+  }
+   if {$fname == ""} { SetStatus "ok" "save file cancelled"; return }
+
+   set fp_fail [catch {set fp [open $fname "w"]}]
+   if { $fp_fail } { SetStatus "error" "error opening $fname for writing"; return }
+   fconfigure $fp -translation binary -encoding binary
+ ####	header
+   set FMT "iiiiiiiiiiiiiiiiia4rrrrrrrrrrrrrrrri"
+   set np -16
+   set nf [expr 8*abs($np)+4]
+   set type 1
+   set axis2 0
+   set w1_2 0
+   set axis1 0
+   set i7 0
+   set i8 0
+   set i9 0
+   set comm_st 0
+   set comm_len 0
+   set raw_st 0
+   set raw_len 0
+   if { $make == "" } { set make "XNMR" }
+   set w0 46061500
+   set ref_u 0.
+   set ref_pt 0.
+   set ph_pt 0.
+   set ph1 0.
+   set sw_1 0.
+   set w0_1 0.
+   set ref_u_1 0.
+   set ref_pt_1 0.
+   set ph_pt_1 0.
+   set ph0_1 0.
+   set ph1_1 0.
+   set fshift 0.
+   set r32 0.
+   set wh_fail [catch {puts -nonewline $fp [binary format $FMT $nf $np \
+  $size $type $domain $axis2 $w1_2 $axis1 $i7 $i8 $i9 $nscans $comm_st $comm_len $raw_st $raw_len $staddress $make \
+  $sw $w0 $ref_u $ref_pt $ph_pt $ph0 $ph1 $sw_1 $w0_1 $ref_u_1 $ref_pt_1 $ph_pt_1 $ph0_1 $ph1_1 $fshift $r32 \
+  $nf ] \
+  }]
+   if { $wh_fail } { SetStatus "error" "error writing header to $fname"; close $fp; return }
+ }
+
 #
 # defaults needed for the blank start-up, if there is no .xnmrrc
 #
@@ -634,7 +769,6 @@ proc SaveConfig { } {
 # master window setup
 #
  wm geometry . "+0+0"; wm title . "$APPNAME (v. $VERSION)"
-
   frame .tbar
   button .tbar.l -image button_open -command {ReloadFile {}}
 #  button .tbar.rl -text "Data file: " -command {ReloadFile $filename}
@@ -645,12 +779,9 @@ proc SaveConfig { } {
 #  button .tbar.r -text "Redraw" -command {set x_min {}; set x_max {}; set y_min {}; set y_max {}; ReDraw .g}
   button .tbar.r -image button_redraw -command {set x_min {}; set x_max {}; set y_min {}; set y_max {}; ReDraw .g}
   button .tbar.exit -image button_exit -command { SaveConfig; exit }
-
   pack .tbar -side top -fill x
   pack .tbar.l .tbar.f .tbar.make .tbar.save -side left
-
   graph .g -width 900 -height 600 -bd 2 -relief groove
-
   checkbutton .tbar.si -text "Im" -command { .g element configure Im -hide $hide_i } -variable hide_i -onvalue "off" -offvalue "on" -foreground green
   checkbutton .tbar.sr -text "Re" -command { .g element configure Re -hide $hide_r } -variable hide_r -onvalue "off" -offvalue "on" -foreground blue
   entry .tbar.sw -width 12 -justify right -textvariable sw
@@ -672,28 +803,28 @@ proc SaveConfig { } {
   button .tbar.ft -text "FT" -command { FFT }
   pack .tbar.exit .tbar.s .tbar.si .tbar.sr .tbar.sw .tbar.swl .tbar.st .tbar.stl .tbar.ph0 .tbar.phl .tbar.fsh .tbar.shl .tbar.bc .tbar.tau .tbar.em .tbar.ft -side right -fill x
 
-
-  frame .bbar 
+  frame .bbar
   button .bbar.r -image button_redraw -command {set x_min {}; set x_max {}; set y_min {}; set y_max {}; ReDraw .g}
   button .bbar.e -image button_hzoom   -command {HoriZoom 0.5}
   button .bbar.c -image button_hunzoom -command {HoriZoom 2.0}
 #  button .bbar.e -text "< >" -command {HoriZoom 0.5}
 # button .bbar.cc -text "> <" -command {HoriZoom 2.0}
   scrollbar .bbar.hs -command { .g axis view x } -orient horizontal
-  button .bbar.con -image button_attach -command {}
-  entry .bbar.loc -textvariable port -width 15
-  button .bbar.go -text "Start"
+  button .bbar.con -image button_attach -command {ConnectPICLab}
+  entry .bbar.loc -textvariable P_port -width 15
+  button .bbar.go -text "Start" -command {aquire}
   label .bbar.sc -text "nScans"
   entry .bbar.nsc -textvariable nscans -width 6
   label .bbar.p -text "Phase list"
   entry .bbar.pl -textvariable phaseList -width 4
-  label .bbar.progress -text "nScans:"
+  label .bbar.progress -text "Scan:"
   label .bbar.cumulitive -textvariable completed -width 6
   label .bbar.dash -text "/"
   label .bbar.tot -textvariable total -width 6
-  label .bbar.ev -text "every"
+  label .bbar.ev -text "Report every"
   entry .bbar.ref -textvariable refresh -width 3
   label .bbar.scans -text "scans"
+  button .bbar.re -image button_redraw -command {set x_min {}; set x_max {}; set y_min {}; set y_max {}; ReDraw .g}
   pack .bbar -side top -fill x
   pack .bbar.r .bbar.e .bbar.c -side right
   pack .bbar.con -side left
@@ -710,14 +841,13 @@ proc SaveConfig { } {
   pack .bbar.ev -side left
   pack .bbar.ref -side left
   pack .bbar.scans -side left
+  pack .bbar.re -side left
   pack .bbar.hs -expand 1 -fill both
-
   frame .status
   label .status.led  -text "" -background green -width 2
   label .status.text -text "Ready."
   pack .status -side bottom -fill x
   pack .status.led .status.text -side left
-
   frame .rbar
   scrollbar .rbar.vs -command { .g axis view y } -orient vertical
 #  button .rbar.m -text "x2" -command {VertZoom 0.5}
@@ -727,28 +857,22 @@ proc SaveConfig { } {
   pack .rbar -side right -fill y
   pack .rbar.m .rbar.d -side top
   pack .rbar.vs -expand 1 -fill both
-
   pack .g  -expand 1  -fill both
- 
-  set rcname ".xnmrrc" 
-  if [file exists $rcname] { 
-    source $rcname 
-    }
 
+  set rcname ".xnmrrc"
+  if [file exists $rcname] {
+    source $rcname
+    }
  .g element create Re -xdata ::tt -ydata ::re -pixels 3 -color blue;  .g element configure Re -hide $hide_r
  .g element create Im -xdata ::tt -ydata ::im -pixels 3 -color green; .g element configure Im -hide $hide_i
-
   if {$filename != "" && [file exists $filename]} { ReloadFile $filename }
-
  .g axis configure y -min $y_min -max $y_max
  .g axis configure x -min $x_min -max $x_max
  .g axis configure x -scrollcommand { .bbar.hs set }
  .g axis configure y -scrollcommand { .rbar.vs set }
  .g grid configure -hide no -dashes { 2 2 }
  .g legend configure -position plotarea -anchor ne
-
  Rbc_Crosshairs .g
  Rbc_ZoomStack .g
 # Rbc_ActiveLegend .g
-
  event generate .g <Configure>
